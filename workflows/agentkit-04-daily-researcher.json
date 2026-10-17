@@ -1,0 +1,311 @@
+{
+ "name": "AgentKit · 04 — Daily Researcher",
+ "nodes": [
+  {
+   "id": "bcb82cc3-dea6-4afe-ab63-c922acceef21",
+   "name": "📌 SETUP GUIDE",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    60
+   ],
+   "parameters": {
+    "color": 4,
+    "content": "## 📰 AgentKit · 04 — Daily Researcher\n**Roz subah 8 baje: top tech news ka AI digest seedha Telegram pe.**\n\n**Setup (8 min):**\n1. **Schedule** — 🕗 node pe time set hai (8:00). Change karna ho to node kholo.\n2. **RSS** — CONFIG `rss_url`: default Hacker News frontpage. Apni niche ka RSS lagao (e.g. niche blog).\n3. **AI + Telegram + Sheets** — pehle wali tarah credentials + IDs.\n4. **Active** karo → kal subah digest hazir.\n\n**Flow:** Schedule → RSS → top stories filter → AI digest (Roman Urdu ya English) → Telegram → log.\n**Pro tip:** `digest_language`: `Roman Urdu` likho to digest Roman Urdu mein aayega.\n",
+    "height": 700,
+    "width": 620
+   }
+  },
+  {
+   "id": "3823e39a-a488-4f16-aaaf-46e4d27872c7",
+   "name": "🕗 Daily 8AM",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    240,
+    560
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "days",
+       "triggerAtHour": 8,
+       "triggerAtMinute": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "7bd63a9c-b500-4b79-8ba4-bef9caef432c",
+   "name": "⚙️ CONFIG",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    460,
+    560
+   ],
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c0",
+       "name": "ai_base_url",
+       "type": "string",
+       "value": "http://localhost:11434/v1"
+      },
+      {
+       "id": "c1",
+       "name": "ai_api_key",
+       "type": "string",
+       "value": "ollama"
+      },
+      {
+       "id": "c2",
+       "name": "ai_model",
+       "type": "string",
+       "value": "llama3.1"
+      },
+      {
+       "id": "c3",
+       "name": "telegram_chat_id",
+       "type": "string",
+       "value": "YOUR_TELEGRAM_CHAT_ID"
+      },
+      {
+       "id": "c4",
+       "name": "sheet_id",
+       "type": "string",
+       "value": "YOUR_GOOGLE_SHEET_ID"
+      },
+      {
+       "id": "c5",
+       "name": "log_tab",
+       "type": "string",
+       "value": "digests"
+      },
+      {
+       "id": "c6",
+       "name": "rss_url",
+       "type": "string",
+       "value": "https://hnrss.org/frontpage"
+      },
+      {
+       "id": "c7",
+       "name": "max_items",
+       "type": "string",
+       "value": "5"
+      },
+      {
+       "id": "c8",
+       "name": "digest_language",
+       "type": "string",
+       "value": "English"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "c0fd119a-2ecc-470f-881d-21bdb66285e4",
+   "name": "📡 Fetch News",
+   "type": "n8n-nodes-base.rssFeedRead",
+   "typeVersion": 1,
+   "position": [
+    680,
+    560
+   ],
+   "parameters": {
+    "url": "={{ $('⚙️ CONFIG').first().json.rss_url }}"
+   }
+  },
+  {
+   "id": "27ca29a1-e4b7-480b-9e02-7fbc9bc7e0e1",
+   "name": "📰 Pick Top Stories",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// Dedupe + top N stories\nconst maxN = Number($('⚙️ CONFIG').first().json.max_items);\nconst seen = new Set(); const picks = [];\nfor (const it of $('📡 Fetch News').all()) {\n  const j = it.json; const t = (j.title || '').trim();\n  if (!t || seen.has(t.toLowerCase())) continue;\n  seen.add(t.toLowerCase());\n  picks.push({title: t, link: j.link || j.url || '', summary: (j.contentSnippet || j.content || '').slice(0, 300)});\n  if (picks.length >= maxN) break;\n}\nconst list = picks.map((p, i) => `${i+1}. ${p.title}\n   ${p.link}\n   ${p.summary}`).join('\\n\\n');\nreturn [{json: {stories: list, count: picks.length, date: new Date().toISOString().slice(0,10)}}];"
+   }
+  },
+  {
+   "id": "277b770b-9d24-4e4e-a9bc-aee8933766a4",
+   "name": "🤖 AI Digest",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    560
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.5, messages: [{role: 'system', content: 'You write sharp morning tech digests.'}, {role: 'user', content: 'Write a morning digest in ' + $('⚙️ CONFIG').first().json.digest_language + '. For each story: one-line what happened + one-line why it matters. Keep total under 200 words. Stories:\\n' + $json.stories}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "ef5a58f8-5b5d-4e44-9b14-813f8e7e7bc3",
+   "name": "✉️ Format Digest",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// AI text -> clean message\nconst out = $('🤖 AI Digest').first().json;\nlet txt = '';\ntry { txt = out.choices[0].message.content; } catch(e) { txt = JSON.stringify(out).slice(0,2000); }\nconst info = $('📰 Pick Top Stories').first().json;\nreturn [{json: {chat_id: $('⚙️ CONFIG').first().json.telegram_chat_id,\n  text: '📰 MORNING DIGEST — ' + info.date + '\\n\\n' + txt,\n  date: info.date, count: info.count}}];"
+   }
+  },
+  {
+   "id": "3ad6288d-d281-4144-86e1-af610d09ebee",
+   "name": "📤 Send Digest",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1560,
+    470
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $json.chat_id }}",
+    "text": "={{ $json.text }}"
+   }
+  },
+  {
+   "id": "ea80a06a-0d2b-4c63-9566-18556ed548c6",
+   "name": "🗂️ Log",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    650
+   ],
+   "parameters": {
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [],
+     "schema": [],
+     "value": null
+    },
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "append",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.log_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "🕗 Daily 8AM": {
+   "main": [
+    [
+     {
+      "node": "⚙️ CONFIG",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⚙️ CONFIG": {
+   "main": [
+    [
+     {
+      "node": "📡 Fetch News",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📡 Fetch News": {
+   "main": [
+    [
+     {
+      "node": "📰 Pick Top Stories",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📰 Pick Top Stories": {
+   "main": [
+    [
+     {
+      "node": "🤖 AI Digest",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🤖 AI Digest": {
+   "main": [
+    [
+     {
+      "node": "✉️ Format Digest",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "✉️ Format Digest": {
+   "main": [
+    [
+     {
+      "node": "📤 Send Digest",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "🗂️ Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "templateCredsSetupCompleted": false
+ },
+ "pinData": {}
+}

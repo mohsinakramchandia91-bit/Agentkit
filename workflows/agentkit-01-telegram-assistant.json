@@ -1,0 +1,319 @@
+{
+ "name": "AgentKit · 01 — Telegram AI Assistant",
+ "nodes": [
+  {
+   "id": "87c7a7bc-9c7c-4cba-b518-daceac21fcb1",
+   "name": "📌 SETUP GUIDE",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    60
+   ],
+   "parameters": {
+    "color": 4,
+    "content": "## 🤖 AgentKit · 01 — Telegram AI Assistant\n**Apna personal AI assistant — Telegram pe, poori chat memory ke saath.**\n\n**Setup (10 min):**\n1. **Telegram bot** — @BotFather → /newbot → token copy. n8n mein Telegram credential banao. 📩 Trigger + 📤 Reply dono nodes pe lagao.\n2. **AI** — ⚙️ CONFIG mein `ai_base_url`:\n   - Ollama (FREE, local): `http://localhost:11434/v1` — pehle `ollama pull llama3.1` karo\n   - OpenAI: `https://api.openai.com/v1` + `ai_api_key` mein key\n3. **Memory sheet** — Google Sheet banao, tab `memory`, columns: `chat_id | role | content | ts`. Sheet ID CONFIG mein `sheet_id`.\n4. **Google credential** — 📚 Read Memory + 💾 Save Memory nodes pe lagao.\n5. Workflow **Active** karo → bot ko Telegram pe message bhejo.\n\n**Flow:** Trigger → CONFIG → Sheets se history → AI (history + naya msg) → jawab → history save.\n**Pro tip:** `system_prompt` badlo = nayi personality. Roman Urdu bot chahiye? Prompt mein likho: \"Reply in Roman Urdu.\"\n**Limit:** heavy traffic pe Sheets slow ho sakti hai — upgrade path README mein.\n",
+    "height": 760,
+    "width": 620
+   }
+  },
+  {
+   "id": "6511066a-26cc-421b-9bde-90a9bee01520",
+   "name": "📩 Telegram Trigger",
+   "type": "n8n-nodes-base.telegramTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    240,
+    560
+   ],
+   "parameters": {
+    "updates": [
+     "message"
+    ],
+    "additionalFields": {}
+   }
+  },
+  {
+   "id": "a2bb2af7-bad4-47a9-aa23-6b71244aee0f",
+   "name": "⚙️ CONFIG",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    460,
+    560
+   ],
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c0",
+       "name": "ai_base_url",
+       "type": "string",
+       "value": "http://localhost:11434/v1"
+      },
+      {
+       "id": "c1",
+       "name": "ai_api_key",
+       "type": "string",
+       "value": "ollama"
+      },
+      {
+       "id": "c2",
+       "name": "ai_model",
+       "type": "string",
+       "value": "llama3.1"
+      },
+      {
+       "id": "c3",
+       "name": "system_prompt",
+       "type": "string",
+       "value": "You are a helpful, sharp AI assistant. Be concise, warm, no fluff."
+      },
+      {
+       "id": "c4",
+       "name": "sheet_id",
+       "type": "string",
+       "value": "YOUR_GOOGLE_SHEET_ID"
+      },
+      {
+       "id": "c5",
+       "name": "memory_tab",
+       "type": "string",
+       "value": "memory"
+      },
+      {
+       "id": "c6",
+       "name": "log_tab",
+       "type": "string",
+       "value": "log"
+      },
+      {
+       "id": "c7",
+       "name": "max_history",
+       "type": "string",
+       "value": "10"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "0f26549a-c883-4bc7-b0c7-2716f0f806fb",
+   "name": "📚 Read Memory",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    680,
+    560
+   ],
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "read",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.memory_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  },
+  {
+   "id": "2831a489-6fbd-42d5-80c1-6dfd6a4232e1",
+   "name": "🧠 Build Messages",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// Chat memory (Sheets) + naya message -> OpenAI messages array\nconst cfg = $('⚙️ CONFIG').first().json;\nconst tg = $('📩 Telegram Trigger').first().json;\nconst chatId = tg.message.chat.id;\nconst text = (tg.message.text || '').trim();\nconst maxH = Number(cfg.max_history) * 2;\nconst rows = $('📚 Read Memory').all().map(i => i.json)\n  .filter(r => String(r.chat_id) === String(chatId)).slice(-maxH);\nconst messages = [{role: 'system', content: cfg.system_prompt}];\nfor (const r of rows) messages.push({role: r.role, content: r.content});\nmessages.push({role: 'user', content: text});\nreturn [{json: {chat_id: chatId, user_text: text, messages}}];"
+   }
+  },
+  {
+   "id": "7b8b7148-5373-400d-ba24-9dd7ab83a918",
+   "name": "🤖 AI Chat",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    560
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.7, messages: $json.messages}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "5acffa6e-a266-437f-98ab-20482d35f694",
+   "name": "💾 Save + Extract",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// AI ka jawab nikalo + memory rows (Sheets append ke liye)\nconst prev = $('🧠 Build Messages').first().json;\nconst out = $('🤖 AI Chat').first().json;\nlet reply = '';\ntry { reply = out.choices[0].message.content; }\ncatch (e) { reply = 'AI se jawab nahi aaya. AI URL/key check karo.'; }\nconst ts = new Date().toISOString();\nreturn [\n  {json: {chat_id: prev.chat_id, role: 'user', content: prev.user_text, ts}},\n  {json: {chat_id: prev.chat_id, role: 'assistant', content: reply, ts}}\n];"
+   }
+  },
+  {
+   "id": "f7c8010d-3dc1-4d67-b3fb-8dd6b0e50967",
+   "name": "📤 Reply",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1560,
+    560
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $('🧠 Build Messages').first().json.chat_id }}",
+    "text": "={{ $('💾 Save + Extract').last().json.content }}"
+   }
+  },
+  {
+   "id": "2b2d206f-575b-42a8-a2d6-dd84bb60269f",
+   "name": "🗂️ Log",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    760
+   ],
+   "parameters": {
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [],
+     "schema": [],
+     "value": null
+    },
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "append",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.memory_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "📩 Telegram Trigger": {
+   "main": [
+    [
+     {
+      "node": "⚙️ CONFIG",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⚙️ CONFIG": {
+   "main": [
+    [
+     {
+      "node": "📚 Read Memory",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📚 Read Memory": {
+   "main": [
+    [
+     {
+      "node": "🧠 Build Messages",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🧠 Build Messages": {
+   "main": [
+    [
+     {
+      "node": "🤖 AI Chat",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🤖 AI Chat": {
+   "main": [
+    [
+     {
+      "node": "💾 Save + Extract",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "💾 Save + Extract": {
+   "main": [
+    [
+     {
+      "node": "🗂️ Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🗂️ Log": {
+   "main": [
+    [
+     {
+      "node": "📤 Reply",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "templateCredsSetupCompleted": false
+ },
+ "pinData": {}
+}

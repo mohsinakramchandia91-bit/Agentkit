@@ -1,0 +1,320 @@
+{
+ "name": "AgentKit · 03 — Lead Qualifier",
+ "nodes": [
+  {
+   "id": "9536240c-c8a9-4f34-9998-5799843167bb",
+   "name": "📌 SETUP GUIDE",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    60
+   ],
+   "parameters": {
+    "color": 4,
+    "content": "## 🎯 AgentKit · 03 — Lead Qualifier\n**Website form → AI lead scoring (1-10) → hot leads foran Telegram pe.**\n\n**Setup (10 min):**\n1. **Webhook URL** — 🌐 Webhook node kholo → Production URL copy karo → apne landing page form mein lagao. Fields: `name, email, business, budget, message`.\n2. **AI** — CONFIG: Ollama ya OpenAI.\n3. **Telegram** — 🔥 Hot Lead Alert node pe credential. Chat ID CONFIG mein.\n4. **Sheets** — tab `leads`: `date | name | email | business | budget | score | verdict | reason`.\n5. **Active** karo → test POST bhejo.\n\n**Flow:** Webhook → AI judge (score+verdict JSON) → score >= threshold? → Hot: Telegram alert + log | Cold: sirf log.\n**Pro tip:** `score_threshold` 7 hai. Strict chahiye? 8 karo.\n",
+    "height": 700,
+    "width": 620
+   }
+  },
+  {
+   "id": "e0de20b8-74fb-404a-9624-6a3c3846c5c2",
+   "name": "🌐 Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    240,
+    560
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "agentkit-lead",
+    "responseMode": "onReceived",
+    "options": {}
+   }
+  },
+  {
+   "id": "de75e5f3-0aa2-4e14-be24-758c9f1e5814",
+   "name": "⚙️ CONFIG",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    460,
+    560
+   ],
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c0",
+       "name": "ai_base_url",
+       "type": "string",
+       "value": "http://localhost:11434/v1"
+      },
+      {
+       "id": "c1",
+       "name": "ai_api_key",
+       "type": "string",
+       "value": "ollama"
+      },
+      {
+       "id": "c2",
+       "name": "ai_model",
+       "type": "string",
+       "value": "llama3.1"
+      },
+      {
+       "id": "c3",
+       "name": "telegram_chat_id",
+       "type": "string",
+       "value": "YOUR_TELEGRAM_CHAT_ID"
+      },
+      {
+       "id": "c4",
+       "name": "sheet_id",
+       "type": "string",
+       "value": "YOUR_GOOGLE_SHEET_ID"
+      },
+      {
+       "id": "c5",
+       "name": "log_tab",
+       "type": "string",
+       "value": "leads"
+      },
+      {
+       "id": "c6",
+       "name": "score_threshold",
+       "type": "string",
+       "value": "7"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "2a89533f-c78b-405d-a475-d80d5911131b",
+   "name": "🧠 Build Judge Prompt",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    680,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// Webhook fields -> AI scoring prompt\nconst b = $('🌐 Webhook').first().json.body || $('🌐 Webhook').first().json;\nconst prompt = `Score this sales lead 1-10 and reply ONLY valid JSON: {\"score\": <1-10>, \"verdict\": \"<hot|warm|cold>\", \"reason\": \"<one line>\"}.\n\nScoring: clear budget + real business + specific need = high. Vague/tire-kicker = low.\n\nName: ${b.name || '-'}\nEmail: ${b.email || '-'}\nBusiness: ${b.business || '-'}\nBudget: ${b.budget || '-'}\nMessage: ${b.message || '-'}`;\nreturn [{json: {prompt, lead: {name: b.name||'-', email: b.email||'-',\n  business: b.business||'-', budget: b.budget||'-', message: (b.message||'').slice(0,500)}}}];"
+   }
+  },
+  {
+   "id": "574b210c-2d3b-4cb8-8436-1604499c7bae",
+   "name": "🤖 AI Judge",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    900,
+    560
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.2, messages: [{role: 'system', content: 'You are a strict B2B lead scorer. Reply ONLY with valid JSON, no markdown fences.'}, {role: 'user', content: $json.prompt}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "e9535164-7379-4d43-8242-a1e80330b5fd",
+   "name": "🔍 Parse Score",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1120,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// AI JSON -> score number\nconst raw = $('🤖 AI Judge').first().json;\nlet txt = '';\ntry { txt = raw.choices[0].message.content; } catch(e) { txt = JSON.stringify(raw); }\ntxt = txt.replace(/```json|```/g, '').trim();\nlet score = 0, verdict = 'cold', reason = 'parse failed';\ntry { const j = JSON.parse(txt); score = Number(j.score)||0; verdict = j.verdict||'cold'; reason = j.reason||''; }\ncatch(e) { const m = txt.match(/\"score\"\\s*:\\s*(\\d+)/); if (m) score = Number(m[1]); }\nconst lead = $('🧠 Build Judge Prompt').first().json.lead;\nreturn [{json: {...lead, score, verdict, reason, date: new Date().toISOString()}}];"
+   }
+  },
+  {
+   "id": "5c52740b-ef56-4e83-aea0-de96dca5fa90",
+   "name": "🔀 Hot?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    560
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.score }}",
+       "rightValue": "={{ Number($('⚙️ CONFIG').first().json.score_threshold) }}",
+       "operator": {
+        "type": "number",
+        "operation": "largerEqual"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "714984c4-47e4-457a-b0a5-0b97bb1c4c24",
+   "name": "🔥 Hot Lead Alert",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1560,
+    380
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $('⚙️ CONFIG').first().json.telegram_chat_id }}",
+    "text": "=🔥 HOT LEAD — {{ $json.score }}/10 ({{ $json.verdict }})\n\n👤 {{ $json.name }} ({{ $json.email }})\n🏢 {{ $json.business }}\n💰 Budget: {{ $json.budget }}\n💬 {{ $json.message }}\n\n🧠 {{ $json.reason }}"
+   }
+  },
+  {
+   "id": "043b0904-f22c-43d6-a7c6-6cfd536fd142",
+   "name": "🗂️ Log",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    740
+   ],
+   "parameters": {
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [],
+     "schema": [],
+     "value": null
+    },
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "append",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.log_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "🌐 Webhook": {
+   "main": [
+    [
+     {
+      "node": "⚙️ CONFIG",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⚙️ CONFIG": {
+   "main": [
+    [
+     {
+      "node": "🧠 Build Judge Prompt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🧠 Build Judge Prompt": {
+   "main": [
+    [
+     {
+      "node": "🤖 AI Judge",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🤖 AI Judge": {
+   "main": [
+    [
+     {
+      "node": "🔍 Parse Score",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🔍 Parse Score": {
+   "main": [
+    [
+     {
+      "node": "🔀 Hot?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🔀 Hot?": {
+   "main": [
+    [
+     {
+      "node": "🔥 Hot Lead Alert",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "🗂️ Log",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "🗂️ Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "templateCredsSetupCompleted": false
+ },
+ "pinData": {}
+}

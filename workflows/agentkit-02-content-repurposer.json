@@ -1,0 +1,470 @@
+{
+ "name": "AgentKit · 02 — Content Repurposer",
+ "nodes": [
+  {
+   "id": "21fcbf25-0bc7-469b-bb3c-3bf4024f0355",
+   "name": "📌 SETUP GUIDE",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    60
+   ],
+   "parameters": {
+    "color": 4,
+    "content": "## ⚡ AgentKit · 02 — Content Repurposer\n**Telegram pe `/repurpose <topic>` likho → 4 platforms ka content pack wapas.**\n\n**Setup (10 min):**\n1. **Telegram bot** — @BotFather token → n8n Telegram credential (Trigger + Send nodes).\n2. **AI** — CONFIG: Ollama (`http://localhost:11434/v1`) ya OpenAI. 4 AI nodes khud-ba-khud CONFIG se key/URL lete hain.\n3. **Sheets log** — Sheet banao, tab `log`. ID CONFIG mein.\n4. **Active** karo → Telegram pe bhejo: `/repurpose AI tools for small business`\n\n**Flow:** Trigger → command parse → 4 AI nodes (parallel) → pack build → Telegram → Sheets log.\n**Note:** 4 AI calls = ~30-60 sec. Sabar rakho, pack worth it hai.\n",
+    "height": 700,
+    "width": 620
+   }
+  },
+  {
+   "id": "b9746ddf-0558-46f7-ae06-1a9b637cb1b5",
+   "name": "📩 Telegram Trigger",
+   "type": "n8n-nodes-base.telegramTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    240,
+    560
+   ],
+   "parameters": {
+    "updates": [
+     "message"
+    ],
+    "additionalFields": {}
+   }
+  },
+  {
+   "id": "a58f0250-a217-4ade-b198-077581afeeea",
+   "name": "⚙️ CONFIG",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    460,
+    560
+   ],
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c0",
+       "name": "ai_base_url",
+       "type": "string",
+       "value": "http://localhost:11434/v1"
+      },
+      {
+       "id": "c1",
+       "name": "ai_api_key",
+       "type": "string",
+       "value": "ollama"
+      },
+      {
+       "id": "c2",
+       "name": "ai_model",
+       "type": "string",
+       "value": "llama3.1"
+      },
+      {
+       "id": "c3",
+       "name": "sheet_id",
+       "type": "string",
+       "value": "YOUR_GOOGLE_SHEET_ID"
+      },
+      {
+       "id": "c4",
+       "name": "log_tab",
+       "type": "string",
+       "value": "log"
+      },
+      {
+       "id": "c5",
+       "name": "default_tone",
+       "type": "string",
+       "value": "bold, friendly, no fluff"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "9399a91f-3aa5-4aae-95c3-8424558000c6",
+   "name": "✂️ Parse Command",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    680,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// /repurpose <topic> se topic nikalo\nconst tg = $('📩 Telegram Trigger').first().json;\nconst text = (tg.message.text || '').trim();\nconst m = text.match(/^\\/repurpose\\s+(.+)/i);\nif (!m) return [{json: {ok: false, chat_id: tg.message.chat.id}}];\nreturn [{json: {ok: true, chat_id: tg.message.chat.id, topic: m[1].trim(),\n  tone: $('⚙️ CONFIG').first().json.default_tone}}];"
+   }
+  },
+  {
+   "id": "3608ae33-f851-4c58-bede-a71902ffdb37",
+   "name": "🔀 Has Topic?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    900,
+    560
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "bdf5ce72-656a-4f69-8fa2-f9c218e2869d",
+   "name": "📖 Usage Hint",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1120,
+    760
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $('✂️ Parse Command').first().json.chat_id }}",
+    "text": "=⚡ Use: `/repurpose <topic>`\n\nExample:\n`/repurpose AI tools for small business`"
+   }
+  },
+  {
+   "id": "4e797b4b-d469-4ce5-a7b3-0672f254cb52",
+   "name": "🐦 X Thread",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    200
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.8, messages: [{role: 'system', content: 'You are a viral X (Twitter) copywriter. Punchy, human, never corporate.'}, {role: 'user', content: 'Write a 5-post X thread. Post 1 = hook (under 240 chars). Posts 2-4 = one value idea each. Post 5 = CTA + question. Number 1/5..5/5. Max 2 hashtags, last post only. Topic: ' + $json.topic + ' Tone: ' + $json.tone}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "323a8bd4-9f45-48d2-85e6-f1c8fd6269ac",
+   "name": "💼 LinkedIn Post",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    400
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.8, messages: [{role: 'system', content: 'You are a LinkedIn thought-leader ghostwriter. Insightful, professional, story-driven.'}, {role: 'user', content: 'Write a LinkedIn post: hook line, personal story angle, 3 insights, CTA. Under 150 words. 3 hashtags at end. Topic: ' + $json.topic + ' Tone: ' + $json.tone}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "5c509a9a-0cb9-46db-a192-ea0c1de8e295",
+   "name": "📸 Instagram Caption",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    600
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.8, messages: [{role: 'system', content: 'You are an Instagram copywriter. Visual, emoji-smart, hook first.'}, {role: 'user', content: 'Write an IG caption: scroll-stopping first line, value in 100 words, CTA + 8 hashtags. Topic: ' + $json.topic + ' Tone: ' + $json.tone}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "2649092a-d9ed-48b0-82b6-6535f026ad02",
+   "name": "🎬 YouTube Pack",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    800
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.8, messages: [{role: 'system', content: 'You are a YouTube strategist. Titles + description + chapters.'}, {role: 'user', content: 'Give: 3 title options, 120-word SEO description, 5 chapters with timestamps, 10 tags. Topic: ' + $json.topic + ' Tone: ' + $json.tone}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "950d8172-1008-42f5-8103-75aac9ccf4fe",
+   "name": "📦 Build Pack",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    500
+   ],
+   "parameters": {
+    "jsCode": "// 4 AI outputs -> aik clean pack (VCM pattern)\nfunction pick(nm) {\n  try {\n    const j = $(nm).first().json;\n    if (j.choices && j.choices[0] && j.choices[0].message) return j.choices[0].message.content;\n    return JSON.stringify(j).slice(0, 4000);\n  } catch (e) { return '[missing: ' + nm + ']'; }\n}\nconst src = $('✂️ Parse Command').first().json;\nreturn [{json: {chat_id: src.chat_id, topic: src.topic,\n  x: pick('🐦 X Thread'), li: pick('💼 LinkedIn Post'),\n  ig: pick('📸 Instagram Caption'), yt: pick('🎬 YouTube Pack'),\n  date: new Date().toISOString()}}];"
+   }
+  },
+  {
+   "id": "f6c504a7-10bf-4714-ae40-caa504085158",
+   "name": "📤 Send Pack",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1560,
+    500
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $json.chat_id }}",
+    "text": "=⚡ CONTENT PACK — {{ $json.topic }}\n\n━━━ X THREAD ━━━\n{{ $json.x }}\n\n━━━ LINKEDIN ━━━\n{{ $json.li }}\n\n━━━ INSTAGRAM ━━━\n{{ $json.ig }}\n\n━━━ YOUTUBE ━━━\n{{ $json.yt }}"
+   }
+  },
+  {
+   "id": "78415c55-1be8-429a-a21e-76e338c5837d",
+   "name": "🗂️ Log",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    1780,
+    500
+   ],
+   "parameters": {
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [],
+     "schema": [],
+     "value": null
+    },
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "append",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.log_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "📩 Telegram Trigger": {
+   "main": [
+    [
+     {
+      "node": "⚙️ CONFIG",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⚙️ CONFIG": {
+   "main": [
+    [
+     {
+      "node": "✂️ Parse Command",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "✂️ Parse Command": {
+   "main": [
+    [
+     {
+      "node": "🔀 Has Topic?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🔀 Has Topic?": {
+   "main": [
+    [
+     {
+      "node": "🐦 X Thread",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "💼 LinkedIn Post",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "📸 Instagram Caption",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "🎬 YouTube Pack",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "📖 Usage Hint",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🐦 X Thread": {
+   "main": [
+    [
+     {
+      "node": "📦 Build Pack",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "💼 LinkedIn Post": {
+   "main": [
+    [
+     {
+      "node": "📦 Build Pack",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📸 Instagram Caption": {
+   "main": [
+    [
+     {
+      "node": "📦 Build Pack",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🎬 YouTube Pack": {
+   "main": [
+    [
+     {
+      "node": "📦 Build Pack",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📦 Build Pack": {
+   "main": [
+    [
+     {
+      "node": "📤 Send Pack",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "🗂️ Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "templateCredsSetupCompleted": false
+ },
+ "pinData": {}
+}

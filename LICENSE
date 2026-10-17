@@ -1,0 +1,30 @@
+# AgentKit — Community License v1.0
+
+Copyright (c) 2026 Onyx AI. All rights reserved.
+
+## You MAY
+
+- Use AgentKit for **personal, educational, and non-commercial** projects.
+- **Modify** the workflows for your own learning and experiments.
+- **Share** the original or modified workflows **only** under these same terms
+  (share-alike): anyone you share with gets these same rights.
+
+## You MAY NOT
+
+- Use AgentKit (original or modified) in any **commercial** context: client work,
+  paid products, revenue-generating services, or internal business operations
+  of a for-profit entity — without a Commercial License.
+- Sell, sublicense, or redistribute AgentKit itself (even modified) for a fee.
+- Remove or alter copyright notices.
+
+## Commercial use = Commercial License
+
+If you want to use AgentKit to make money — client automations, SaaS wrappers,
+agency services, or keeping your modifications private — buy the Commercial
+License (one-time, on Gumroad). It exempts you from the non-commercial and
+share-alike restrictions above, forever, for the version you purchased.
+
+## Warranty
+
+Provided "AS IS", without warranty of any kind. The authors are not liable
+for any claim or damages from use of this software.

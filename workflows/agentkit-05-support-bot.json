@@ -1,0 +1,307 @@
+{
+ "name": "AgentKit · 05 — Support Bot",
+ "nodes": [
+  {
+   "id": "d40c8d63-dedc-4044-a710-6bb5dcbd3ead",
+   "name": "📌 SETUP GUIDE",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    60
+   ],
+   "parameters": {
+    "color": 4,
+    "content": "## 🎧 AgentKit · 05 — Support Bot\n**Telegram support bot jo SIRF tumhare FAQ se jawab de — hallucination nahi.**\n\n**Setup (10 min):**\n1. **Knowledge base** — Google Sheet, tab `faq`, columns: `question | answer`. Apne 10-20 common sawal-jawab likho.\n2. **Telegram + AI + Sheets** — credentials + IDs (pehle wali tarah).\n3. **Active** karo → bot se product sawal pucho.\n\n**Flow:** Trigger → FAQ sheet parho → AI (strict: sirf context se jawab, warna fallback) → reply → Q&A log.\n**Pro tip:** `fallback_text` mein apna WhatsApp number do — unknown sawal pe customer tum tak aaye.\n**Sachaai:** chhoti KB = behtar jawab. 50+ rows pe AI confuse ho sakta hai — tab vector DB ka socho (README).\n",
+    "height": 740,
+    "width": 620
+   }
+  },
+  {
+   "id": "c4851852-47fd-495e-9c3f-80c5dc47dbb6",
+   "name": "📩 Telegram Trigger",
+   "type": "n8n-nodes-base.telegramTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    240,
+    560
+   ],
+   "parameters": {
+    "updates": [
+     "message"
+    ],
+    "additionalFields": {}
+   }
+  },
+  {
+   "id": "a7a70be4-1ff6-4eaa-a12f-56f817bbd9a4",
+   "name": "⚙️ CONFIG",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    460,
+    560
+   ],
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c0",
+       "name": "ai_base_url",
+       "type": "string",
+       "value": "http://localhost:11434/v1"
+      },
+      {
+       "id": "c1",
+       "name": "ai_api_key",
+       "type": "string",
+       "value": "ollama"
+      },
+      {
+       "id": "c2",
+       "name": "ai_model",
+       "type": "string",
+       "value": "llama3.1"
+      },
+      {
+       "id": "c3",
+       "name": "sheet_id",
+       "type": "string",
+       "value": "YOUR_GOOGLE_SHEET_ID"
+      },
+      {
+       "id": "c4",
+       "name": "kb_tab",
+       "type": "string",
+       "value": "faq"
+      },
+      {
+       "id": "c5",
+       "name": "log_tab",
+       "type": "string",
+       "value": "support_log"
+      },
+      {
+       "id": "c6",
+       "name": "fallback_text",
+       "type": "string",
+       "value": "Iska jawab mere paas nahi hai — WhatsApp pe rabta karein: YOUR_NUMBER"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "b40687a1-a33d-406e-8a71-b63349f8757b",
+   "name": "📚 Load KB",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    680,
+    560
+   ],
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "read",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.kb_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  },
+  {
+   "id": "2b7f4920-ebf5-474b-8b37-0f8b004535df",
+   "name": "🧠 Build Context",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// FAQ rows -> context + user question\nconst cfg = $('⚙️ CONFIG').first().json;\nconst tg = $('📩 Telegram Trigger').first().json;\nconst q = (tg.message.text || '').trim();\nconst kb = $('📚 Load KB').all().map(i => i.json)\n  .filter(r => r.question && r.answer)\n  .map(r => 'Q: ' + r.question + '\\nA: ' + r.answer).join('\\n\\n');\nconst prompt = 'KNOWLEDGE BASE:\\n' + kb + '\\n\\nCUSTOMER QUESTION: ' + q +\n  '\\n\\nAnswer ONLY from the knowledge base above. If the answer is not there, reply EXACTLY: ' + cfg.fallback_text;\nreturn [{json: {chat_id: tg.message.chat.id, question: q, prompt}}];"
+   }
+  },
+  {
+   "id": "67b07d60-e791-463e-a180-cd9af9e00c37",
+   "name": "🤖 AI Answer",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    560
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('⚙️ CONFIG').first().json.ai_base_url }}/chat/completions",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $('⚙️ CONFIG').first().json.ai_api_key }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model: $('⚙️ CONFIG').first().json.ai_model, temperature: 0.1, messages: [{role: 'system', content: 'You are a strict support agent. Never invent facts.'}, {role: 'user', content: $json.prompt}]}) }}",
+    "options": {
+     "timeout": 90000
+    }
+   }
+  },
+  {
+   "id": "c654b053-a659-4942-8481-463b4c38512d",
+   "name": "✉️ Format Reply",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    560
+   ],
+   "parameters": {
+    "jsCode": "// Extract + flat log row (Sheets ke liye)\nconst prev = $('🧠 Build Context').first().json;\nconst out = $('🤖 AI Answer').first().json;\nlet a = '';\ntry { a = out.choices[0].message.content; } catch(e) { a = $('⚙️ CONFIG').first().json.fallback_text; }\nreturn [{json: {chat_id: prev.chat_id, reply: a,\n  date: new Date().toISOString(), question: prev.question, answer: a}}];"
+   }
+  },
+  {
+   "id": "3755142a-758e-4c85-ad5c-66d6da0b3651",
+   "name": "📤 Reply",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1560,
+    470
+   ],
+   "parameters": {
+    "additionalFields": {},
+    "chatId": "={{ $json.chat_id }}",
+    "text": "={{ $json.reply }}"
+   }
+  },
+  {
+   "id": "f52d37ce-891c-423e-a9e9-a3a99bdd0fe9",
+   "name": "🗂️ Log Q&A",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    650
+   ],
+   "parameters": {
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [],
+     "schema": [],
+     "value": null
+    },
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('⚙️ CONFIG').first().json.sheet_id }}"
+    },
+    "operation": "append",
+    "options": {},
+    "resource": "sheetWithinDocument",
+    "sheetName": {
+     "__rl": true,
+     "mode": "list",
+     "value": "={{ $('⚙️ CONFIG').first().json.log_tab }}",
+     "cachedResultName": "Sheet1"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "📩 Telegram Trigger": {
+   "main": [
+    [
+     {
+      "node": "⚙️ CONFIG",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⚙️ CONFIG": {
+   "main": [
+    [
+     {
+      "node": "📚 Load KB",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "📚 Load KB": {
+   "main": [
+    [
+     {
+      "node": "🧠 Build Context",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🧠 Build Context": {
+   "main": [
+    [
+     {
+      "node": "🤖 AI Answer",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "🤖 AI Answer": {
+   "main": [
+    [
+     {
+      "node": "✉️ Format Reply",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "✉️ Format Reply": {
+   "main": [
+    [
+     {
+      "node": "📤 Reply",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "🗂️ Log Q&A",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "templateCredsSetupCompleted": false
+ },
+ "pinData": {}
+}
