@@ -89,7 +89,7 @@ This repo is the **free Community edition** — perfect for personal projects an
 
 Need it for client work? Get the commercial license (one-time payment, lifetime v1.x updates):
 
-👉 **[Get AgentKit Commercial — $59](https://mohsina91.gumroad.com/l/znqkv)** · 🎟️ code `AGENTLAUNCH` = $10 off
+👉 **[Get AgentKit Commercial — $59](https://onyxailabs.gumroad.com/l/znqkv)** · 🎟️ code `AGENTLAUNCH` = $10 off
 
 ---
 
