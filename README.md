@@ -14,6 +14,8 @@ AgentKit is five complete, import-ready [n8n](https://n8n.io) workflows — each
 
 ---
 
+🎬 **Watch the demo** — see all five agents in action: [YouTube](https://youtu.be/Q0hFOdTNvDU)
+
 ## The 5 Agents
 
 | # | Agent | What it does |
