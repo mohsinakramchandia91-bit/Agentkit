@@ -2,7 +2,7 @@
 
 [![n8n](https://img.shields.io/badge/n8n-v2.x-blue)](https://n8n.io)
 [![License: Community](https://img.shields.io/badge/License-Community-green)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/mohsinakramchandia91-bit/AgentKit/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/onyxailabs/AgentKit/pulls)
 [![No Cloud](https://img.shields.io/badge/cloud-none-success)]()
 [![Setup](https://img.shields.io/badge/setup-15_min-orange)]()
 
@@ -105,4 +105,4 @@ Community edition: share-alike, non-commercial — see [LICENSE](LICENSE). For c
 
 ---
 
-Built with ⚡ by [Onyx AI](https://mohsinakramchandia91-bit.github.io/Catalog/) · Questions? Open an issue.
+Built with ⚡ by [Onyx AI](https://onyxailabs.github.io/Catalog/) · Questions? Open an issue.
